@@ -1,5 +1,5 @@
 # Discord-Gemini-Bot
-使用Gemini API的大安電研Discord機器人
+使用Gemini API的大安電研Discord AI聊天機器人
 
 ## 如何使用
 ```pip install -U -r requirements.txt```
