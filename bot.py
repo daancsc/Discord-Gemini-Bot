@@ -4,6 +4,7 @@ import discord
 import aiohttp
 from discord.ext import commands
 import google.generativeai as genai
+from spider import islink,gettitle
 
 load_dotenv()
 
@@ -133,7 +134,7 @@ async def on_message(msg):
                             bot_msg = await msg.reply('正在分析圖片...', mention_author=False)
                             image_data = await resp.read() # 定義 image_data 為 aiohttp 回應的數據
                             response_text = await image_api(image_data, msg.content) # 用 image_api 函式來發送圖片數據跟文字給 api
-                            await update_history(f"{msg.author.display_name}傳送了一張圖片，內容是「{response_text}」")
+                            await update_history(f"[{msg.author.display_name}]: 傳送了一張圖片，內容是「{response_text}」")
                             await bot_msg.edit(content=response_text)
                             print(f'使用者的圖片內容:{response_text}')
                             return
@@ -143,11 +144,26 @@ async def on_message(msg):
             message_history = []
             await msg.channel.send("對話紀錄已清除")
             return
-        history = await update_history(f"{msg.author.display_name}說: " + msg.content)
+        
+        links = islink(msg.content)
+        if links:
+            word = ""
+            for link in links:
+                title = gettitle(link) # 取得連結中的 title
+                word += msg.content.replace(link, f'(一個網址, 網址標題是: "{title}")\n' if title else '(一個網址, 網址無法辨識)\n')
+            history = await update_history(f'[{msg.author.display_name}]: {word}')
+            print(word)
+            response = await call_api(prompt + history)
+            await update_history("[model]: " + response)
+            await msg.reply(response.replace("[model]:",""))
+            print(response)
+            return
+
+        history = await update_history(f"[{msg.author.display_name}]: " + msg.content)
         print(":" + msg.content)
         response = await call_api(prompt + history)
-        await update_history(response)
-        await msg.reply(response)
+        await update_history("[model]: " + response)
+        await msg.reply(response.replace("[model]:",""))
         print(response)
 
 #在本地執行
