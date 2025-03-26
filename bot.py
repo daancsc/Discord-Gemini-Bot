@@ -108,7 +108,6 @@ async def on_message(msg):
                                 await msg.reply('圖片載入失敗。', mention_author=False) # 如果圖片分析失敗就不再執行下方程式
                                 return
                             print(f'正在分析使用者的圖片...')
-                         #   bot_msg = await msg.reply('正在分析圖片...', mention_author=False)
                             image_data = await resp.read() # 定義 image_data 為 aiohttp 回應的數據
                             response_text = await image_api(image_data, msg.content) # 用 image_api 函式來發送圖片數據跟文字給 api
                             print(f'使用者的圖片內容:{response_text}')
