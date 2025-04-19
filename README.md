@@ -4,7 +4,13 @@
 ## 如何使用
 ```pip install -U -r requirements.txt```
 
-將 Gemini API Key 和 Discord Bot Token 放入 `.env.example`
+在 `.env.example` 放入以下參數:
+    - Gemini API Key
+    - Discord bot token
+    - Wolframalpha app ID
+    - Google Custom Search API Key
+    - Google Custom Search API Search Engine ID
+    - YouTube Data API v3 API Key
 
 然後將 `.env.example` 更名成 `.env`
 

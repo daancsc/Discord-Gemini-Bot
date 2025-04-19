@@ -2,3 +2,5 @@ google-generativeai
 discord
 aiohttp
 python-dotenv
+isodate
+google-api-python-client
