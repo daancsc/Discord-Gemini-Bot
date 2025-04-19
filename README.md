@@ -16,6 +16,14 @@
 
 運行 `bot.py`
 
+## 功能
+- AI聊天
+- 辨識圖片
+- 爬取網址title來判斷內容
+- 透過 Wolframalpha 和 Google 搜尋內容
+- 爬取 nownews 各版新聞
+- 搜尋 Youtube 影片
+
 ## FAQ
 - [如何獲得 Gemini API Key](https://github.com/imyimang/discord-gemini-chat-bot/blob/main/docs/zh/q2.md)
 
