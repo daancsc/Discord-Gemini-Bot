@@ -188,9 +188,9 @@ async def on_ready():
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    if msg.channel.id != 1286543172654207078:
-        return
-
+    #if msg.channel.id != 1286543172654207078:
+     #   return
+    
     async with msg.channel.typing():
         attachment_info = None  # 儲存附件資訊（圖片描述或文字檔內容）
 

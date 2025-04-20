@@ -24,7 +24,7 @@
 - 爬取 nownews 各版新聞
 - 搜尋 Youtube 影片
 
-## DEMO
+## Demo
 ![image](demo/image.png)
 ![image2](demo/image2.png)
 
