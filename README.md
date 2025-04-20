@@ -24,6 +24,10 @@
 - 爬取 nownews 各版新聞
 - 搜尋 Youtube 影片
 
+## DEMO
+![image](demo/image.png)
+![image2](demo/image2.png)
+
 ## FAQ
 - [如何獲得 Gemini API Key](https://github.com/imyimang/discord-gemini-chat-bot/blob/main/docs/zh/q2.md)
 
