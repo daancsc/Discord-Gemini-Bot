@@ -5,6 +5,7 @@ import google.generativeai as genai
 import aiohttp
 import json
 import os
+import aiofiles
 from dotenv import load_dotenv
 from spider import islink,gettitle
 from tools import wolframalpha,get_news,youtube_search
@@ -190,29 +191,68 @@ async def on_message(msg):
     if msg.channel.id != 1286543172654207078:
         return
     async with msg.channel.typing():
-        if msg.attachments: # 如果訊息中有檔案
-            for attachment in msg.attachments: # 遍歷訊息中檔案
-                if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']): # 檢測副檔名
+        if msg.attachments:  # 如果訊息中有檔案
+            for attachment in msg.attachments:
+                filename = attachment.filename.lower()
+
+                # 圖片處理
+                if any(filename.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(attachment.url) as resp: # 讀取圖片的 url 並將他用 aiohttp 函式庫轉換成數據
+                        async with session.get(attachment.url) as resp:
                             if resp.status != 200:
-                                await msg.reply('圖片載入失敗。', mention_author=False) # 如果圖片分析失敗就不再執行下方程式
+                                await msg.reply('圖片載入失敗。', mention_author=False)
                                 return
+
                             print(f'正在分析使用者的圖片...')
-                         #   bot_msg = await msg.reply('正在分析圖片...', mention_author=False)
-                            image_data = await resp.read() # 定義 image_data 為 aiohttp 回應的數據
-                            response_text = await image_api(image_data) # 用 image_api 函式來發送圖片數據跟文字給 api
+                            image_data = await resp.read()
+                            response_text = await image_api(image_data)
                             print(f'使用者的圖片內容:{response_text}')
+
                             roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-                            history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]:{msg.content}(附上一張圖片，內容是「{response_text}」)")
+                            history = await update_history(
+                                f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]:{msg.content}(附上一張圖片，內容是「{response_text}」)"
+                            )
                             response = await call_api(prompt + history)
                             await update_history("[model]: " + response)
-
                             response = await process_tools_in_response(response)
-                            
-                            await msg.reply(response.replace("[model]:",""))
+                            await msg.reply(response.replace("[model]:", ""))
                             print(response)
                             return
+
+                # 純文字檔案處理（.txt, .md, .log）
+                elif any(filename.endswith(ext) for ext in ['.txt', '.md', '.log']):
+                    file_path = f"temp_{msg.id}_{filename}"
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(attachment.url) as resp:
+                            if resp.status != 200:
+                                await msg.reply('文字檔案載入失敗。', mention_author=False)
+                                return
+                            
+                            f = await aiofiles.open(file_path, mode='wb')
+                            await f.write(await resp.read())
+                            await f.close()
+
+                    try:
+                        f = await aiofiles.open(file_path, mode='r', encoding='utf-8', errors='ignore')
+                        text_data = await f.read()
+                        await f.close()
+
+                        print(f'使用者上傳的文字檔內容:\n{text_data[:500]}')
+
+                        roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
+                        history = await update_history(
+                            f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]:{msg.content}(附上一個文字檔，內容是「{text_data}...」)"
+                        )
+                        response = await call_api(prompt + history)
+                        await update_history("[model]: " + response)
+                        response = await process_tools_in_response(response)
+                        await msg.reply(response.replace("[model]:", ""))
+                        print(response)
+
+                    finally:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    return
 
         global message_history
         if msg.content.lower() == "reset":

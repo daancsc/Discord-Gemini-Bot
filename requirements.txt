@@ -4,3 +4,4 @@ aiohttp
 python-dotenv
 isodate
 google-api-python-client
+aiofiles
