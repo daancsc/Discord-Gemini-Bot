@@ -190,8 +190,12 @@ async def on_message(msg):
         return
     if msg.channel.id != 1286543172654207078:
         return
+
     async with msg.channel.typing():
-        if msg.attachments:  # 如果訊息中有檔案
+        attachment_info = None  # 儲存附件資訊（圖片描述或文字檔內容）
+
+        # 處理圖片或文字檔附件
+        if msg.attachments:
             for attachment in msg.attachments:
                 filename = attachment.filename.lower()
 
@@ -207,19 +211,9 @@ async def on_message(msg):
                             image_data = await resp.read()
                             response_text = await image_api(image_data)
                             print(f'使用者的圖片內容:{response_text}')
+                            attachment_info = f"(附上一張圖片，內容是「{response_text}」)"
 
-                            roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-                            history = await update_history(
-                                f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]:{msg.content}(附上一張圖片，內容是「{response_text}」)"
-                            )
-                            response = await call_api(prompt + history)
-                            await update_history("[model]: " + response)
-                            response = await process_tools_in_response(response)
-                            await msg.reply(response.replace("[model]:", ""))
-                            print(response)
-                            return
-
-                # 純文字檔案處理（.txt, .md, .log）
+                # 純文字檔案處理
                 elif any(filename.endswith(ext) for ext in ['.txt', '.md', '.log']):
                     file_path = f"temp_{msg.id}_{filename}"
                     async with aiohttp.ClientSession() as session:
@@ -238,55 +232,38 @@ async def on_message(msg):
                         await f.close()
 
                         print(f'使用者上傳的文字檔內容:\n{text_data[:500]}')
-
-                        roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-                        history = await update_history(
-                            f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]:{msg.content}(附上一個文字檔，內容是「{text_data}...」)"
-                        )
-                        response = await call_api(prompt + history)
-                        await update_history("[model]: " + response)
-                        response = await process_tools_in_response(response)
-                        await msg.reply(response.replace("[model]:", ""))
-                        print(response)
-
+                        attachment_info = f"(附上一個文字檔，內容是「{text_data[:300]}...」)"
                     finally:
                         if os.path.exists(file_path):
                             os.remove(file_path)
-                    return
 
+        # 重設對話指令
         global message_history
         if msg.content.lower() == "reset":
             message_history = []
             await msg.channel.send("對話紀錄已清除")
             return
-        
+
+        # 處理文字與網址
+        word = msg.content
         links = islink(msg.content)
         if links:
-            word = ""
             for link in links:
-                title = gettitle(link) # 取得連結中的 title
-                word += msg.content.replace(link, f'(一個網址, 網址標題是: "{title}")\n' if title else '(一個網址, 網址無法辨識)\n')
-            roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-            history = await update_history(f'[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}')
-            print(word)
-            response = await call_api(prompt + history)
-            await update_history("[model]: " + response)
+                title = gettitle(link)
+                print(title)
+                word = word.replace(link, f'(一個網址, 網址標題是: "{title}")\n' if title else '(一個網址, 網址無法辨識)\n')
 
-            response = await process_tools_in_response(response)
-
-            await msg.reply(response.replace("[model]:",""))
-            print(response)
-            return
+        if attachment_info:
+            word += f"\n{attachment_info}"
 
         roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: " + msg.content)
-        print(":" + msg.content)
+        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}")
+        print("訊息內容:", word)
+
         response = await call_api(prompt + history)
         await update_history("[model]: " + response)
-
         response = await process_tools_in_response(response)
-
-        await msg.reply(response.replace("[model]:",""))
+        await msg.reply(response.replace("[model]:", ""))
         print(response)
 
 #在本地執行
