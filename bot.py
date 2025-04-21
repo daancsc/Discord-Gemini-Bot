@@ -8,13 +8,17 @@ import os
 import aiofiles
 from dotenv import load_dotenv
 from spider import islink,gettitle
-from tools import wolframalpha,get_news,youtube_search
+from tools import wolframalpha,get_news,youtube_search,tmdb_search,tmdb_trending,tmdb_discover,tmdb_find,tmdb_rated_list,tmdb_now_playing,tmdb_upcoming,tmdb_popular,tmdb_top_rated
 
 load_dotenv()
 
 api_key = os.getenv('GEMINI_API_KEY')
 bot_token = os.getenv('BOT_TOKEN')
 
+# 保存每個用戶的未完成回覆內容
+user_response_cache = {}
+# Discord消息長度限制
+DISCORD_MAX_LENGTH = 1900  # 設置為1900以便於添加額外指示
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all()) # 設定 Discord bot
 
@@ -148,6 +152,78 @@ async def process_tools_in_response(response: str) -> str:
         elif data.get("type") == "youtube_search" and data.get("query") and data.get("max_results") and data.get("language") and data.get("duration"):
             print(f"正在使用 youtube_search，內容：{data['query']}")
             tool_response = await youtube_search(data["query"], int(data["max_results"]), data["language"], data["duration"])
+            
+        elif data.get("type") == "tmdb_search" and data.get("query"):
+            print(f"正在使用 tmdb_search，搜尋內容：{data['query']}")
+            media_type = data.get("media_type", "movie")
+            language = data.get("language", "zh-TW")
+            year = data.get("year", None)
+            include_adult = data.get("include_adult", False)
+            tool_response = tmdb_search(data["query"], media_type, language, year, include_adult)
+            
+        elif data.get("type") == "tmdb_trending":
+            print("正在獲取TMDB趨勢內容")
+            media_type = data.get("media_type", "all")
+            time_window = data.get("time_window", "week")
+            language = data.get("language", "zh-TW")
+            tool_response = tmdb_trending(media_type, time_window, language)
+            
+        elif data.get("type") == "tmdb_discover" and data.get("media_type"):
+            print(f"正在使用 tmdb_discover，媒體類型：{data['media_type']}")
+            media_type = data.get("media_type")
+            language = data.get("language", "zh-TW")
+            sort_by = data.get("sort_by", "popularity.desc")
+            year = data.get("year", None)
+            with_genres = data.get("with_genres", None)
+            vote_average_gte = data.get("vote_average_gte", None)
+            with_keywords = data.get("with_keywords", None)
+            include_adult = data.get("include_adult", False)
+            tool_response = tmdb_discover(media_type, language, sort_by, year, 
+                                         with_genres, vote_average_gte, with_keywords, include_adult)
+            
+        elif data.get("type") == "tmdb_find" and data.get("external_id") and data.get("external_source"):
+            print(f"正在使用 tmdb_find，外部ID：{data['external_id']}，資料源：{data['external_source']}")
+            external_id = data.get("external_id")
+            external_source = data.get("external_source")
+            language = data.get("language", "zh-TW")
+            tool_response = tmdb_find(external_id, external_source, language)
+            
+        elif data.get("type") == "tmdb_rated_list" and data.get("account_id"):
+            print(f"正在獲取用戶評分清單，用戶ID：{data['account_id']}")
+            account_id = data.get("account_id")
+            media_type = data.get("media_type", "tv")
+            language = data.get("language", "zh-TW")
+            session_id = data.get("session_id", None)
+            sort_by = data.get("sort_by", "created_at.desc")
+            tool_response = tmdb_rated_list(account_id, media_type, language, session_id, sort_by)
+            
+        elif data.get("type") == "tmdb_now_playing":
+            print("正在獲取當前正在上映的電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_now_playing(language, page, region)
+            
+        elif data.get("type") == "tmdb_upcoming":
+            print("正在獲取即將上映的電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_upcoming(language, page, region)
+            
+        elif data.get("type") == "tmdb_popular":
+            print("正在獲取熱門電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_popular(language, page, region)
+            
+        elif data.get("type") == "tmdb_top_rated":
+            print("正在獲取評分最高的電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_top_rated(language, page, region)
 
         # 移除當前 JSON 區塊（無論是否有有效工具回應）
         response = response[:start] + response[end:]
@@ -188,10 +264,26 @@ async def on_ready():
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    #if msg.channel.id != 1286543172654207078:
-     #   return
-    
+    if msg.channel.id != 1149692178575130678:
+        return
     async with msg.channel.typing():
+        # 檢查是否是要求繼續上一個回覆的請求
+        if msg.content.lower() in ["繼續", "接著說", "然後呢", "繼續說", "下一部分", "後面呢", "more", "continue"]:
+            # 檢查是否有未完成的回覆
+            if msg.author.id in user_response_cache:
+                remaining_content = user_response_cache[msg.author.id]
+                
+                # 如果剩餘內容仍然超過Discord限制，繼續截斷
+                if len(remaining_content) > DISCORD_MAX_LENGTH:
+                    current_part = remaining_content[:DISCORD_MAX_LENGTH]
+                    user_response_cache[msg.author.id] = remaining_content[DISCORD_MAX_LENGTH:]
+                    await msg.reply(f"繼續剛才的內容：\n\n{current_part}\n\n...(仍有更多內容，可再次輸入「繼續」查看)")
+                else:
+                    # 發送剩餘內容並清除緩存
+                    await msg.reply(f"繼續剛才的內容：\n\n{remaining_content}")
+                    del user_response_cache[msg.author.id]
+                return
+        
         attachment_info = None  # 儲存附件資訊（圖片描述或文字檔內容）
 
         # 處理圖片或文字檔附件
@@ -263,8 +355,36 @@ async def on_message(msg):
         response = await call_api(prompt + history)
         await update_history("[model]: " + response)
         response = await process_tools_in_response(response)
-        await msg.reply(response.replace("[model]:", ""))
-        print(response)
+        
+        # 移除前綴標籤
+        response = response.replace("[model]:", "")
+        
+        # 檢查回覆長度是否超過Discord限制
+        if len(response) > DISCORD_MAX_LENGTH:
+            # 找到合適的截斷點（完整句子或段落結束處）
+            cutoff_indexes = [response.rfind('.', 0, DISCORD_MAX_LENGTH), 
+                             response.rfind('!', 0, DISCORD_MAX_LENGTH),
+                             response.rfind('?', 0, DISCORD_MAX_LENGTH),
+                             response.rfind('\n\n', 0, DISCORD_MAX_LENGTH)]
+            
+            cutoff_index = max(i for i in cutoff_indexes if i != -1)
+            if cutoff_index < DISCORD_MAX_LENGTH * 0.5:  # 如果找不到合適的截斷點，強制截斷
+                cutoff_index = DISCORD_MAX_LENGTH
+            
+            # 分割回覆
+            current_part = response[:cutoff_index+1].strip()
+            remaining_part = response[cutoff_index+1:].strip()
+            
+            # 保存剩餘部分到用戶的暫存中
+            user_response_cache[msg.author.id] = remaining_part
+            
+            # 發送第一部分並通知用戶有更多內容
+            await msg.reply(f"{current_part}\n\n...(內容過長，輸入「繼續」查看更多)")
+            print(f"回覆已截斷，剩餘長度：{len(remaining_part)}")
+        else:
+            # 正常發送回覆
+            await msg.reply(response)
+            print(response)
 
 #在本地執行
 # ================
