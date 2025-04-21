@@ -264,7 +264,7 @@ async def on_ready():
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    if msg.channel.id != 1286543172654207078:
+    if msg.channel.id != 1149692178575130678:
         return
     async with msg.channel.typing():
         # 檢查是否是要求繼續上一個回覆的請求
