@@ -268,8 +268,10 @@ def tmdb_search(query, media_type='movie', language='zh-TW', year=None, include_
             # 獲取評分
             vote_average = item.get('vote_average', 0)
             # 獲取概述，如果太長則截斷
-            overview = item.get('overview', '無概述')
-            if len(overview) > 150:
+            overview = item.get('overview', '')
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
                 overview = overview[:150] + '...'
                 
             # 格式化並添加結果
@@ -367,8 +369,10 @@ def tmdb_discover(media_type='movie', language='zh-TW', sort_by='popularity.desc
             # 獲取評分
             vote_average = item.get('vote_average', 0)
             # 獲取概述，如果太長則截斷
-            overview = item.get('overview', '無概述')
-            if len(overview) > 150:
+            overview = item.get('overview', '')
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
                 overview = overview[:150] + '...'
                 
             # 格式化並添加結果
@@ -618,6 +622,327 @@ def tmdb_rated_list(account_id, media_type='tv', language='zh-TW', session_id=No
     except Exception as e:
         return f"獲取用戶評分清單時發生錯誤：{str(e)}"
 
+def tmdb_now_playing(language='zh-TW', page=1, region=None):
+    """
+    獲取當前正在上映的電影
+    
+    參數:
+    - language: 語言代碼 (例如: 'zh-TW')
+    - page: 頁碼
+    - region: ISO-3166-1國家/地區代碼 (可選)
+    
+    返回格式化的電影列表
+    """
+    base_url = "https://api.themoviedb.org/3"
+    endpoint_url = f"{base_url}/movie/now_playing"
+    
+    # 準備請求參數
+    params = {
+        'api_key': TMDB_API_KEY,
+        'language': language,
+        'page': page
+    }
+    
+    if region:
+        params['region'] = region
+    
+    # 設定請求頭
+    headers = {
+        'Authorization': f'Bearer {TMDB_ACCESS_TOKEN}',
+        'Content-Type': 'application/json;charset=utf-8'
+    }
+    
+    try:
+        # 發送請求
+        response = requests.get(endpoint_url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get('results', [])
+        dates = data.get('dates', {})
+        
+        if not results:
+            return f"目前沒有正在上映的電影資訊。"
+        
+        # 格式化結果
+        formatted_results = []
+        
+        for movie in results[:8]:  # 限制顯示前8部
+            title = movie.get('title', '未知標題')
+            release_date = movie.get('release_date', '未知日期')
+            vote_average = movie.get('vote_average', 0)
+            overview = movie.get('overview', '')
+            
+            # 如果概述太長則截斷
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
+                overview = overview[:150] + '...'
+            
+            # 格式化並添加結果
+            formatted_results.append(
+                f"🎬 電影：{title}\n"
+                f"⭐ 評分：{vote_average}/10\n"
+                f"📅 上映日期：{release_date}\n"
+                f"📝 概述：{overview}\n"
+                f"🔗 連結：https://www.themoviedb.org/movie/{movie.get('id')}"
+            )
+        
+        # 顯示日期範圍
+        date_info = ""
+        if dates:
+            min_date = dates.get('minimum', '')
+            max_date = dates.get('maximum', '')
+            if min_date and max_date:
+                date_info = f"（{min_date} 至 {max_date}）"
+        
+        # 返回格式化的結果
+        region_text = f"在{region}地區" if region else ""
+        total_results = data.get('total_results', 0)
+        return f"目前{region_text}正在上映的電影{date_info}，共有{total_results}部，以下是其中幾部：\n\n" + "\n\n".join(formatted_results)
+        
+    except requests.exceptions.HTTPError as e:
+        return f"TMDB API請求失敗，HTTP錯誤：{str(e)}"
+    except Exception as e:
+        return f"獲取當前上映電影時發生錯誤：{str(e)}"
+
+def tmdb_upcoming(language='zh-TW', page=1, region=None):
+    """
+    獲取即將上映的電影
+    
+    參數:
+    - language: 語言代碼 (例如: 'zh-TW')
+    - page: 頁碼
+    - region: ISO-3166-1國家/地區代碼 (可選)
+    
+    返回格式化的電影列表
+    """
+    base_url = "https://api.themoviedb.org/3"
+    endpoint_url = f"{base_url}/movie/upcoming"
+    
+    # 準備請求參數
+    params = {
+        'api_key': TMDB_API_KEY,
+        'language': language,
+        'page': page
+    }
+    
+    if region:
+        params['region'] = region
+    
+    # 設定請求頭
+    headers = {
+        'Authorization': f'Bearer {TMDB_ACCESS_TOKEN}',
+        'Content-Type': 'application/json;charset=utf-8'
+    }
+    
+    try:
+        # 發送請求
+        response = requests.get(endpoint_url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get('results', [])
+        dates = data.get('dates', {})
+        
+        if not results:
+            return f"目前沒有即將上映的電影資訊。"
+        
+        # 格式化結果
+        formatted_results = []
+        
+        for movie in results[:8]:  # 限制顯示前8部
+            title = movie.get('title', '未知標題')
+            release_date = movie.get('release_date', '未知日期')
+            vote_average = movie.get('vote_average', 0)
+            overview = movie.get('overview', '')
+            
+            # 如果概述太長則截斷
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
+                overview = overview[:150] + '...'
+            
+            # 格式化並添加結果
+            formatted_results.append(
+                f"🎬 電影：{title}\n"
+                f"⭐ 評分：{vote_average}/10\n"
+                f"📅 上映日期：{release_date}\n"
+                f"📝 概述：{overview}\n"
+                f"🔗 連結：https://www.themoviedb.org/movie/{movie.get('id')}"
+            )
+        
+        # 顯示日期範圍
+        date_info = ""
+        if dates:
+            min_date = dates.get('minimum', '')
+            max_date = dates.get('maximum', '')
+            if min_date and max_date:
+                date_info = f"（{min_date} 至 {max_date}）"
+        
+        # 返回格式化的結果
+        region_text = f"在{region}地區" if region else ""
+        total_results = data.get('total_results', 0)
+        return f"即將{region_text}上映的電影{date_info}，共有{total_results}部，以下是其中幾部：\n\n" + "\n\n".join(formatted_results)
+        
+    except requests.exceptions.HTTPError as e:
+        return f"TMDB API請求失敗，HTTP錯誤：{str(e)}"
+    except Exception as e:
+        return f"獲取即將上映電影時發生錯誤：{str(e)}"
+
+def tmdb_popular(language='zh-TW', page=1, region=None):
+    """
+    獲取熱門電影
+    
+    參數:
+    - language: 語言代碼 (例如: 'zh-TW')
+    - page: 頁碼
+    - region: ISO-3166-1國家/地區代碼 (可選)
+    
+    返回格式化的電影列表
+    """
+    base_url = "https://api.themoviedb.org/3"
+    endpoint_url = f"{base_url}/movie/popular"
+    
+    # 準備請求參數
+    params = {
+        'api_key': TMDB_API_KEY,
+        'language': language,
+        'page': page
+    }
+    
+    if region:
+        params['region'] = region
+    
+    # 設定請求頭
+    headers = {
+        'Authorization': f'Bearer {TMDB_ACCESS_TOKEN}',
+        'Content-Type': 'application/json;charset=utf-8'
+    }
+    
+    try:
+        # 發送請求
+        response = requests.get(endpoint_url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get('results', [])
+        
+        if not results:
+            return f"無法獲取熱門電影資訊。"
+        
+        # 格式化結果
+        formatted_results = []
+        
+        for movie in results[:8]:  # 限制顯示前8部
+            title = movie.get('title', '未知標題')
+            release_date = movie.get('release_date', '未知日期')
+            vote_average = movie.get('vote_average', 0)
+            popularity = movie.get('popularity', 0)
+            overview = movie.get('overview', '')
+            
+            # 如果概述太長則截斷
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
+                overview = overview[:150] + '...'
+            
+            # 格式化並添加結果
+            formatted_results.append(
+                f"🎬 電影：{title}\n"
+                f"⭐ 評分：{vote_average}/10\n"
+                f"🔥 人氣指數：{popularity}\n"
+                f"📅 上映日期：{release_date}\n"
+                f"📝 概述：{overview}\n"
+                f"🔗 連結：https://www.themoviedb.org/movie/{movie.get('id')}"
+            )
+        
+        # 返回格式化的結果
+        region_text = f"在{region}地區" if region else ""
+        total_results = data.get('total_results', 0)
+        return f"目前{region_text}最熱門的電影，共有{total_results}部，以下是排名前幾的電影：\n\n" + "\n\n".join(formatted_results)
+        
+    except requests.exceptions.HTTPError as e:
+        return f"TMDB API請求失敗，HTTP錯誤：{str(e)}"
+    except Exception as e:
+        return f"獲取熱門電影時發生錯誤：{str(e)}"
+
+def tmdb_top_rated(language='zh-TW', page=1, region=None):
+    """
+    獲取評分最高的電影
+    
+    參數:
+    - language: 語言代碼 (例如: 'zh-TW')
+    - page: 頁碼
+    - region: ISO-3166-1國家/地區代碼 (可選)
+    
+    返回格式化的電影列表
+    """
+    base_url = "https://api.themoviedb.org/3"
+    endpoint_url = f"{base_url}/movie/top_rated"
+    
+    # 準備請求參數
+    params = {
+        'api_key': TMDB_API_KEY,
+        'language': language,
+        'page': page
+    }
+    
+    if region:
+        params['region'] = region
+    
+    # 設定請求頭
+    headers = {
+        'Authorization': f'Bearer {TMDB_ACCESS_TOKEN}',
+        'Content-Type': 'application/json;charset=utf-8'
+    }
+    
+    try:
+        # 發送請求
+        response = requests.get(endpoint_url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get('results', [])
+        
+        if not results:
+            return f"無法獲取評分最高的電影資訊。"
+        
+        # 格式化結果
+        formatted_results = []
+        
+        for movie in results[:8]:  # 限制顯示前8部
+            title = movie.get('title', '未知標題')
+            release_date = movie.get('release_date', '未知日期')
+            vote_average = movie.get('vote_average', 0)
+            vote_count = movie.get('vote_count', 0)
+            overview = movie.get('overview', '')
+            
+            # 如果概述太長則截斷
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
+                overview = overview[:150] + '...'
+            
+            # 格式化並添加結果
+            formatted_results.append(
+                f"🎬 電影：{title}\n"
+                f"⭐ 評分：{vote_average}/10 (共{vote_count}個評分)\n"
+                f"📅 上映日期：{release_date}\n"
+                f"📝 概述：{overview}\n"
+                f"🔗 連結：https://www.themoviedb.org/movie/{movie.get('id')}"
+            )
+        
+        # 返回格式化的結果
+        region_text = f"在{region}地區" if region else ""
+        total_results = data.get('total_results', 0)
+        return f"評分{region_text}最高的電影，共有{total_results}部，以下是排名前幾的電影：\n\n" + "\n\n".join(formatted_results)
+        
+    except requests.exceptions.HTTPError as e:
+        return f"TMDB API請求失敗，HTTP錯誤：{str(e)}"
+    except Exception as e:
+        return f"獲取評分最高電影時發生錯誤：{str(e)}"
+
 def media_type_name(media_type):
     """將媒體類型轉換為中文名稱"""
     names = {
@@ -674,39 +999,59 @@ def tmdb_trending(media_type='all', time_window='week', language='zh-TW'):
         # 格式化結果
         formatted_results = []
         
-        for item in results[:8]:  # 限制顯示前8項
-            # 確定媒體類型
-            item_media_type = item.get('media_type', media_type)
-            
-            if item_media_type == 'movie':
+        for i, item in enumerate(results[:8], 1):  # 限制顯示前8項，並提供排名
+            # 根據媒體類型獲取相應的信息
+            if (media_type == 'all' and item.get('media_type') == 'person') or media_type == 'person':
+                name = item.get('name', '未知名稱')
+                known_for = ", ".join([i.get('title', i.get('name', '未知')) for i in item.get('known_for', [])])
+                popularity = item.get('popularity', 0)
+                item_type = "人物"
+                
+                # 格式化人物結果
+                formatted_results.append(
+                    f"🎭 {item_type}：{name}\n"
+                    f"🥇 人氣排名：{i}\n"
+                    f"🔥 人氣指數：{popularity}\n"
+                    f"🎬 知名作品：{known_for}\n"
+                    f"🔗 連結：https://www.themoviedb.org/person/{item.get('id')}"
+                )
+                continue
+                
+            # 電影或電視劇
+            if (media_type == 'all' and item.get('media_type') == 'movie') or media_type == 'movie':
                 title = item.get('title', '未知標題')
                 release_date = item.get('release_date', '未知日期')
                 item_type = "電影"
-            elif item_media_type == 'tv':
+                date_prefix = "上映日期"
+                media_url = "movie"
+            else:
                 title = item.get('name', '未知標題')
                 release_date = item.get('first_air_date', '未知日期')
                 item_type = "電視劇"
-            elif item_media_type == 'person':
-                name = item.get('name', '未知名稱')
-                known_for = ", ".join([i.get('title', i.get('name', '未知')) for i in item.get('known_for', [])])
-                formatted_results.append(f"🎭 {name} - 知名作品: {known_for}")
-                continue
-            else:
-                continue
+                date_prefix = "首播日期"
+                media_url = "tv"
                 
             # 獲取評分
             vote_average = item.get('vote_average', 0)
+            
+            # 獲取概述並處理
+            overview = item.get('overview', '')
+            if not overview.strip():
+                overview = '無概述'
+            elif len(overview) > 150:
+                overview = overview[:150] + '...'
                 
-            # 格式化並添加結果
+            # 格式化電影或電視劇結果
             formatted_results.append(
                 f"🔥 {item_type}：{title}\n"
                 f"⭐ 評分：{vote_average}/10\n"
-                f"📅 發行日期：{release_date}\n"
-                f"🔗 連結：https://www.themoviedb.org/{item_media_type}/{item.get('id')}"
+                f"📅 {date_prefix}：{release_date}\n"
+                f"📝 概述：{overview}\n"
+                f"🔗 連結：https://www.themoviedb.org/{media_url}/{item.get('id')}"
             )
-            
+        
         # 返回格式化的結果
-        return f"本{time_window_name(time_window)}趨勢{media_type_name(media_type)}：\n\n" + "\n\n".join(formatted_results)
+        return f"{time_window_name(time_window)}趨勢{media_type_name(media_type)}：\n\n" + "\n\n".join(formatted_results)
         
     except requests.exceptions.HTTPError as e:
         return f"TMDB API請求失敗，HTTP錯誤：{str(e)}"

@@ -8,13 +8,17 @@ import os
 import aiofiles
 from dotenv import load_dotenv
 from spider import islink,gettitle
-from tools import wolframalpha,get_news,youtube_search,tmdb_search,tmdb_trending,tmdb_discover,tmdb_find,tmdb_rated_list
+from tools import wolframalpha,get_news,youtube_search,tmdb_search,tmdb_trending,tmdb_discover,tmdb_find,tmdb_rated_list,tmdb_now_playing,tmdb_upcoming,tmdb_popular,tmdb_top_rated
 
 load_dotenv()
 
 api_key = os.getenv('GEMINI_API_KEY')
 bot_token = os.getenv('BOT_TOKEN')
 
+# 保存每個用戶的未完成回覆內容
+user_response_cache = {}
+# Discord消息長度限制
+DISCORD_MAX_LENGTH = 1900  # 設置為1900以便於添加額外指示
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all()) # 設定 Discord bot
 
@@ -192,6 +196,34 @@ async def process_tools_in_response(response: str) -> str:
             session_id = data.get("session_id", None)
             sort_by = data.get("sort_by", "created_at.desc")
             tool_response = tmdb_rated_list(account_id, media_type, language, session_id, sort_by)
+            
+        elif data.get("type") == "tmdb_now_playing":
+            print("正在獲取當前正在上映的電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_now_playing(language, page, region)
+            
+        elif data.get("type") == "tmdb_upcoming":
+            print("正在獲取即將上映的電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_upcoming(language, page, region)
+            
+        elif data.get("type") == "tmdb_popular":
+            print("正在獲取熱門電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_popular(language, page, region)
+            
+        elif data.get("type") == "tmdb_top_rated":
+            print("正在獲取評分最高的電影")
+            language = data.get("language", "zh-TW")
+            page = data.get("page", 1)
+            region = data.get("region", None)
+            tool_response = tmdb_top_rated(language, page, region)
 
         # 移除當前 JSON 區塊（無論是否有有效工具回應）
         response = response[:start] + response[end:]
@@ -236,6 +268,23 @@ async def on_message(msg):
         return
 
     async with msg.channel.typing():
+        # 檢查是否是要求繼續上一個回覆的請求
+        if msg.content.lower() in ["繼續", "接著說", "然後呢", "繼續說", "下一部分", "後面呢", "more", "continue"]:
+            # 檢查是否有未完成的回覆
+            if msg.author.id in user_response_cache:
+                remaining_content = user_response_cache[msg.author.id]
+                
+                # 如果剩餘內容仍然超過Discord限制，繼續截斷
+                if len(remaining_content) > DISCORD_MAX_LENGTH:
+                    current_part = remaining_content[:DISCORD_MAX_LENGTH]
+                    user_response_cache[msg.author.id] = remaining_content[DISCORD_MAX_LENGTH:]
+                    await msg.reply(f"繼續剛才的內容：\n\n{current_part}\n\n...(仍有更多內容，可再次輸入「繼續」查看)")
+                else:
+                    # 發送剩餘內容並清除緩存
+                    await msg.reply(f"繼續剛才的內容：\n\n{remaining_content}")
+                    del user_response_cache[msg.author.id]
+                return
+        
         attachment_info = None  # 儲存附件資訊（圖片描述或文字檔內容）
 
         # 處理圖片或文字檔附件
@@ -307,8 +356,36 @@ async def on_message(msg):
         response = await call_api(prompt + history)
         await update_history("[model]: " + response)
         response = await process_tools_in_response(response)
-        await msg.reply(response.replace("[model]:", ""))
-        print(response)
+        
+        # 移除前綴標籤
+        response = response.replace("[model]:", "")
+        
+        # 檢查回覆長度是否超過Discord限制
+        if len(response) > DISCORD_MAX_LENGTH:
+            # 找到合適的截斷點（完整句子或段落結束處）
+            cutoff_indexes = [response.rfind('.', 0, DISCORD_MAX_LENGTH), 
+                             response.rfind('!', 0, DISCORD_MAX_LENGTH),
+                             response.rfind('?', 0, DISCORD_MAX_LENGTH),
+                             response.rfind('\n\n', 0, DISCORD_MAX_LENGTH)]
+            
+            cutoff_index = max(i for i in cutoff_indexes if i != -1)
+            if cutoff_index < DISCORD_MAX_LENGTH * 0.5:  # 如果找不到合適的截斷點，強制截斷
+                cutoff_index = DISCORD_MAX_LENGTH
+            
+            # 分割回覆
+            current_part = response[:cutoff_index+1].strip()
+            remaining_part = response[cutoff_index+1:].strip()
+            
+            # 保存剩餘部分到用戶的暫存中
+            user_response_cache[msg.author.id] = remaining_part
+            
+            # 發送第一部分並通知用戶有更多內容
+            await msg.reply(f"{current_part}\n\n...(內容過長，輸入「繼續」查看更多)")
+            print(f"回覆已截斷，剩餘長度：{len(remaining_part)}")
+        else:
+            # 正常發送回覆
+            await msg.reply(response)
+            print(response)
 
 #在本地執行
 # ================
