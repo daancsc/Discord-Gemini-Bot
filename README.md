@@ -24,7 +24,7 @@
 - 爬取 nownews 各版新聞
 - 搜尋 Youtube 影片
 
-# Branches
+## Branches
 - main - 主分支
 - English-version - 英文版本(by [nlcat](https://github.com/956zs))
 
