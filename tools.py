@@ -13,7 +13,7 @@ import json
 
 load_dotenv()
 
-APP_ID = os.getenv('APP_ID')
+APP_ID = os.getenv('WOLFRAMALPHA_APP_ID')
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 SEARCH_ENGINE_ID = os.getenv('SEARCH_ENGINE_ID')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
