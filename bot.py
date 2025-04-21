@@ -7,7 +7,7 @@ import json
 import os
 from dotenv import load_dotenv
 from spider import islink,gettitle
-from tools import wolframalpha,get_news,youtube_search
+from tools import wolframalpha,get_news,youtube_search,tmdb_search,tmdb_trending,tmdb_discover,tmdb_find,tmdb_rated_list
 
 load_dotenv()
 
@@ -147,6 +147,50 @@ async def process_tools_in_response(response: str) -> str:
         elif data.get("type") == "youtube_search" and data.get("query") and data.get("max_results") and data.get("language") and data.get("duration"):
             print(f"正在使用 youtube_search，內容：{data['query']}")
             tool_response = await youtube_search(data["query"], int(data["max_results"]), data["language"], data["duration"])
+            
+        elif data.get("type") == "tmdb_search" and data.get("query"):
+            print(f"正在使用 tmdb_search，搜尋內容：{data['query']}")
+            media_type = data.get("media_type", "movie")
+            language = data.get("language", "zh-TW")
+            year = data.get("year", None)
+            include_adult = data.get("include_adult", False)
+            tool_response = tmdb_search(data["query"], media_type, language, year, include_adult)
+            
+        elif data.get("type") == "tmdb_trending":
+            print("正在獲取TMDB趨勢內容")
+            media_type = data.get("media_type", "all")
+            time_window = data.get("time_window", "week")
+            language = data.get("language", "zh-TW")
+            tool_response = tmdb_trending(media_type, time_window, language)
+            
+        elif data.get("type") == "tmdb_discover" and data.get("media_type"):
+            print(f"正在使用 tmdb_discover，媒體類型：{data['media_type']}")
+            media_type = data.get("media_type")
+            language = data.get("language", "zh-TW")
+            sort_by = data.get("sort_by", "popularity.desc")
+            year = data.get("year", None)
+            with_genres = data.get("with_genres", None)
+            vote_average_gte = data.get("vote_average_gte", None)
+            with_keywords = data.get("with_keywords", None)
+            include_adult = data.get("include_adult", False)
+            tool_response = tmdb_discover(media_type, language, sort_by, year, 
+                                         with_genres, vote_average_gte, with_keywords, include_adult)
+            
+        elif data.get("type") == "tmdb_find" and data.get("external_id") and data.get("external_source"):
+            print(f"正在使用 tmdb_find，外部ID：{data['external_id']}，資料源：{data['external_source']}")
+            external_id = data.get("external_id")
+            external_source = data.get("external_source")
+            language = data.get("language", "zh-TW")
+            tool_response = tmdb_find(external_id, external_source, language)
+            
+        elif data.get("type") == "tmdb_rated_list" and data.get("account_id"):
+            print(f"正在獲取用戶評分清單，用戶ID：{data['account_id']}")
+            account_id = data.get("account_id")
+            media_type = data.get("media_type", "tv")
+            language = data.get("language", "zh-TW")
+            session_id = data.get("session_id", None)
+            sort_by = data.get("sort_by", "created_at.desc")
+            tool_response = tmdb_rated_list(account_id, media_type, language, session_id, sort_by)
 
         # 移除當前 JSON 區塊（無論是否有有效工具回應）
         response = response[:start] + response[end:]
@@ -187,7 +231,7 @@ async def on_ready():
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    if msg.channel.id != 1286543172654207078:
+    if msg.channel.id != 1149692178575130678:
         return
     async with msg.channel.typing():
         if msg.attachments: # 如果訊息中有檔案
