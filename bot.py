@@ -8,7 +8,7 @@ import os
 import aiofiles
 from dotenv import load_dotenv
 from spider import islink,gettitle
-from tools import wolframalpha,get_news,youtube_search
+from tools import wolframalpha,get_news,youtube_search,load_memory
 
 load_dotenv()
 
@@ -56,7 +56,7 @@ image_model = genai.GenerativeModel(
     model_name='gemini-1.5-pro', 
     generation_config=generation_config) # 定義另外一個 model 用來生成圖片回應 (兩者不能相容)
 
-
+pool_file = "pool.json"
 message_history = []
 with open("prompt.txt", "r", encoding="utf-8") as f:
     prompt = f.read()
@@ -86,9 +86,37 @@ async def image_api(image_data):
 # 上傳對話紀錄
 async def update_history(msg):
     message_history.append(msg)
+
     if len(message_history) > 200:
         message_history.pop(0)
+
+    # 每 10 條就觸發 call_api 並寫入 pool.json
+    if len(message_history) % 20 == 0:
+        response = await call_api(
+            prompt + 
+            "\n".join(message_history[-20:]) + 
+            f"\n=====\n以上是使用者與你的對話紀錄，請用自然語言總結出對話(不要使用json格式)的主要內容與重點，並且需提及使用者名稱，用於未來對話中作為參考，以建立長期記憶。")
+        await save_to_pool(response)
+        print("\n已整理記憶\n" + response + "\n")
+
     return "\n".join(message_history)
+
+
+async def save_to_pool(response):
+    # 確保 pool.json 存在並是 list 格式
+    if os.path.exists(pool_file):
+        with open(pool_file, "r", encoding="utf-8") as f:
+            try:
+                pool_data = json.load(f)
+            except json.JSONDecodeError:
+                pool_data = []
+    else:
+        pool_data = []
+
+    pool_data.append(response)
+
+    with open(pool_file, "w", encoding="utf-8") as f:
+        json.dump(pool_data, f, ensure_ascii=False, indent=2)
 
 def extract_json_block(text):
     """
@@ -149,6 +177,10 @@ async def process_tools_in_response(response: str) -> str:
             print(f"正在使用 youtube_search，內容：{data['query']}")
             tool_response = await youtube_search(data["query"], int(data["max_results"]), data["language"], data["duration"])
 
+        elif data.get("type") == "load_memory" and data.get("amount"):
+            print(f"正在使用 get_memory，內容：{data['amount']}")
+            tool_response = await load_memory(data["amount"])
+
         # 移除當前 JSON 區塊（無論是否有有效工具回應）
         response = response[:start] + response[end:]
         print("移除 JSON 後的回應：", response)
@@ -188,9 +220,9 @@ async def on_ready():
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    #if msg.channel.id != 1286543172654207078:
-     #   return
-    
+    # if msg.channel.id != 1286543172654207078:
+    #     return
+
     async with msg.channel.typing():
         attachment_info = None  # 儲存附件資訊（圖片描述或文字檔內容）
 
@@ -250,7 +282,6 @@ async def on_message(msg):
         if links:
             for link in links:
                 title = gettitle(link)
-                print(title)
                 word = word.replace(link, f'(一個網址, 網址標題是: "{title}")\n' if title else '(一個網址, 網址無法辨識)\n')
 
         if attachment_info:

@@ -9,6 +9,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime
 import isodate
+import aiofiles
+import json
 
 load_dotenv()
 
@@ -189,3 +191,27 @@ async def youtube_search(query, max_results=5, language="en", duration="medium")
         return f"YouTube API 請求失敗：{str(e)}"
     except Exception as e:
         return f"搜尋影片時發生錯誤：{str(e)}"
+    
+async def load_memory(amount="all"):
+    try:
+        async with aiofiles.open("pool.json", mode="r") as f:
+            content = await f.read()
+            data = json.loads(content)
+    except FileNotFoundError:
+        return "[system]:（尚未建立記憶）"
+    except json.JSONDecodeError:
+        return "[system]:（記憶檔案損毀或格式錯誤）"
+
+    # 處理 amount 參數
+    if isinstance(amount, str) and amount.lower() == "all":
+        selected_data = data
+    else:
+        try:
+            amount = int(amount)
+            selected_data = data[-amount:] if amount < len(data) else data
+        except ValueError:
+            return "[system]:（amount 參數格式錯誤，請使用整數或 'all'）"
+
+    # 組合記憶字串
+    combined_memory = "[system]:長期記憶內容如下:\n" + "\n\n---\n\n".join(selected_data)
+    return combined_memory
