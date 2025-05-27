@@ -8,7 +8,7 @@ import os
 import aiofiles
 from dotenv import load_dotenv
 from spider import islink,gettitle
-from tools import wolframalpha,get_news,youtube_search,tmdb_search,tmdb_trending,tmdb_discover,tmdb_find,tmdb_rated_list,tmdb_now_playing,tmdb_upcoming,tmdb_popular,tmdb_top_rated
+from tools import wolframalpha,get_news,youtube_search
 
 load_dotenv()
 
@@ -51,13 +51,13 @@ safety_settings = [
 ]
 
 model = genai.GenerativeModel(
-  model_name="gemini-1.5-flash",
-  generation_config=generation_config,
-  safety_settings = safety_settings
+    model_name="gemini-1.5-flash",
+    generation_config=generation_config,
+    safety_settings=safety_settings
 )
 
 image_model = genai.GenerativeModel(
-    model_name='gemini-1.5-pro', 
+    model_name='gemini-2.0-flash',
     generation_config=generation_config) # 定義另外一個 model 用來生成圖片回應 (兩者不能相容)
 
 
@@ -142,7 +142,7 @@ async def process_tools_in_response(response: str) -> str:
 
         tool_response = None
         if data.get("type") == "wolframalpha" and data.get("question_original") and data.get("question_english"):
-            print(f"正在使用 wolframalpha，內容原文:{data["question_original"]}，內容英文:{data["question_english"]}")
+            print(f"正在使用 wolframalpha，內容原文:{data['question_original']}，內容英文:{data['question_english']}")
             tool_response = wolframalpha(data["question_english"], data["question_original"])
 
         elif data.get("type") == "get_news" and data.get("category"):
@@ -152,78 +152,6 @@ async def process_tools_in_response(response: str) -> str:
         elif data.get("type") == "youtube_search" and data.get("query") and data.get("max_results") and data.get("language") and data.get("duration"):
             print(f"正在使用 youtube_search，內容：{data['query']}")
             tool_response = await youtube_search(data["query"], int(data["max_results"]), data["language"], data["duration"])
-            
-        elif data.get("type") == "tmdb_search" and data.get("query"):
-            print(f"正在使用 tmdb_search，搜尋內容：{data['query']}")
-            media_type = data.get("media_type", "movie")
-            language = data.get("language", "zh-TW")
-            year = data.get("year", None)
-            include_adult = data.get("include_adult", False)
-            tool_response = tmdb_search(data["query"], media_type, language, year, include_adult)
-            
-        elif data.get("type") == "tmdb_trending":
-            print("正在獲取TMDB趨勢內容")
-            media_type = data.get("media_type", "all")
-            time_window = data.get("time_window", "week")
-            language = data.get("language", "zh-TW")
-            tool_response = tmdb_trending(media_type, time_window, language)
-            
-        elif data.get("type") == "tmdb_discover" and data.get("media_type"):
-            print(f"正在使用 tmdb_discover，媒體類型：{data['media_type']}")
-            media_type = data.get("media_type")
-            language = data.get("language", "zh-TW")
-            sort_by = data.get("sort_by", "popularity.desc")
-            year = data.get("year", None)
-            with_genres = data.get("with_genres", None)
-            vote_average_gte = data.get("vote_average_gte", None)
-            with_keywords = data.get("with_keywords", None)
-            include_adult = data.get("include_adult", False)
-            tool_response = tmdb_discover(media_type, language, sort_by, year, 
-                                         with_genres, vote_average_gte, with_keywords, include_adult)
-            
-        elif data.get("type") == "tmdb_find" and data.get("external_id") and data.get("external_source"):
-            print(f"正在使用 tmdb_find，外部ID：{data['external_id']}，資料源：{data['external_source']}")
-            external_id = data.get("external_id")
-            external_source = data.get("external_source")
-            language = data.get("language", "zh-TW")
-            tool_response = tmdb_find(external_id, external_source, language)
-            
-        elif data.get("type") == "tmdb_rated_list" and data.get("account_id"):
-            print(f"正在獲取用戶評分清單，用戶ID：{data['account_id']}")
-            account_id = data.get("account_id")
-            media_type = data.get("media_type", "tv")
-            language = data.get("language", "zh-TW")
-            session_id = data.get("session_id", None)
-            sort_by = data.get("sort_by", "created_at.desc")
-            tool_response = tmdb_rated_list(account_id, media_type, language, session_id, sort_by)
-            
-        elif data.get("type") == "tmdb_now_playing":
-            print("正在獲取當前正在上映的電影")
-            language = data.get("language", "zh-TW")
-            page = data.get("page", 1)
-            region = data.get("region", None)
-            tool_response = tmdb_now_playing(language, page, region)
-            
-        elif data.get("type") == "tmdb_upcoming":
-            print("正在獲取即將上映的電影")
-            language = data.get("language", "zh-TW")
-            page = data.get("page", 1)
-            region = data.get("region", None)
-            tool_response = tmdb_upcoming(language, page, region)
-            
-        elif data.get("type") == "tmdb_popular":
-            print("正在獲取熱門電影")
-            language = data.get("language", "zh-TW")
-            page = data.get("page", 1)
-            region = data.get("region", None)
-            tool_response = tmdb_popular(language, page, region)
-            
-        elif data.get("type") == "tmdb_top_rated":
-            print("正在獲取評分最高的電影")
-            language = data.get("language", "zh-TW")
-            page = data.get("page", 1)
-            region = data.get("region", None)
-            tool_response = tmdb_top_rated(language, page, region)
 
         # 移除當前 JSON 區塊（無論是否有有效工具回應）
         response = response[:start] + response[end:]
@@ -264,7 +192,7 @@ async def on_ready():
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    if msg.channel.id != 1149692178575130678:
+    if msg.channel.id != 1363707629028900894:
         return
     async with msg.channel.typing():
         # 檢查是否是要求繼續上一個回覆的請求
@@ -348,8 +276,13 @@ async def on_message(msg):
         if attachment_info:
             word += f"\n{attachment_info}"
 
+        # 檢查是否為回覆訊息
+        if msg.reference and msg.reference.resolved:
+            referenced_msg = msg.reference.resolved
+            word = f"(回覆 {referenced_msg.author.display_name} 的訊息: {referenced_msg.content})\n{word}"
+
         roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}")
+        history = await update_history(f"[{msg.author.display_name}({msg.author.name})(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}")
         print("訊息內容:", word)
 
         response = await call_api(prompt + history)
