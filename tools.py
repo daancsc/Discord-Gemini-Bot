@@ -215,3 +215,7 @@ async def load_memory(amount="all"):
     # 組合記憶字串
     combined_memory = "[system]:長期記憶內容如下:\n" + "\n\n---\n\n".join(selected_data)
     return combined_memory
+
+def get_current_time():
+    now = datetime.now()
+    return f"當前時間是{now.strftime('%Y-%m-%d %H:%M:%S')}，星期{['一','二','三','四','五','六','日'][now.weekday()]}"

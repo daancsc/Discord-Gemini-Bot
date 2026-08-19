@@ -1,4 +1,5 @@
 import discord
+import time
 import aiohttp
 from discord.ext import commands
 import google.generativeai as genai
@@ -6,9 +7,10 @@ import aiohttp
 import json
 import os
 import aiofiles
+from datetime import datetime
 from dotenv import load_dotenv
 from spider import islink,gettitle
-from tools import wolframalpha,get_news,youtube_search,load_memory
+from tools import wolframalpha,get_news,youtube_search,load_memory,get_current_time
 
 load_dotenv()
 
@@ -47,13 +49,13 @@ safety_settings = [
 ]
 
 model = genai.GenerativeModel(
-  model_name="gemini-1.5-flash",
+  model_name="gemini-3.5-flash-lite",
   generation_config=generation_config,
   safety_settings = safety_settings
 )
 
 image_model = genai.GenerativeModel(
-    model_name='gemini-1.5-pro', 
+    model_name='gemini-3.5-flash-lite', 
     generation_config=generation_config) # 定義另外一個 model 用來生成圖片回應 (兩者不能相容)
 
 pool_file = "pool.json"
@@ -90,14 +92,15 @@ async def update_history(msg):
     if len(message_history) > 200:
         message_history.pop(0)
 
-    # 每 10 條就觸發 call_api 並寫入 pool.json
-    if len(message_history) % 20 == 0:
+    # 每 50 條就觸發 call_api 並寫入 pool.json
+    if len(message_history) >= 50 and len(message_history) % 50 == 0:
         response = await call_api(
             prompt + 
-            "\n".join(message_history[-20:]) + 
-            f"\n=====\n以上是使用者與你的對話紀錄，請用自然語言總結出對話(不要使用json格式)的主要內容與重點，並且需提及使用者名稱，用於未來對話中作為參考，以建立長期記憶。")
+            "\n".join(message_history[-50:]) + 
+            f"\n=====\n當前時間是{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n以上是使用者與你的對話紀錄，請用自然語言，客觀的總結出對話(不要使用json格式)的主要內容與重點，並且需提及使用者 ID（而非名稱）和時間，用於未來對話中作為參考，以建立長期記憶。")
         await save_to_pool(response)
         print("\n已整理記憶\n" + response + "\n")
+        message_history = message_history[-10:]
 
     return "\n".join(message_history)
 
@@ -181,6 +184,10 @@ async def process_tools_in_response(response: str) -> str:
             print(f"正在使用 get_memory，內容：{data['amount']}")
             tool_response = await load_memory(data["amount"])
 
+        elif data.get("type") == "get_current_time":
+            print("正在使用 get_current_time")
+            tool_response = get_current_time()
+
         # 移除當前 JSON 區塊（無論是否有有效工具回應）
         response = response[:start] + response[end:]
         print("移除 JSON 後的回應：", response)
@@ -214,14 +221,23 @@ async def process_tools_in_response(response: str) -> str:
 async def on_ready():
     print(f'bot on ready！')
 
+# 延遲測試指令
+@bot.command(name='ping')
+async def ping(ctx):
+    start = time.perf_counter()
+    message = await ctx.send('Pong！')
+    end = time.perf_counter()
+    await message.edit(content=f'Pong！延遲 {round((end - start) * 1000)} ms (API 往返) | 閘道 {round(bot.latency * 1000)} ms')
+
 
 # on_message事件
 @bot.event
 async def on_message(msg):
     if msg.author == bot.user:
         return
-    # if msg.channel.id != 1286543172654207078:
-    #     return
+    await bot.process_commands(msg)
+    if msg.content.startswith(bot.command_prefix):
+        return
 
     async with msg.channel.typing():
         attachment_info = None  # 儲存附件資訊（圖片描述或文字檔內容）
