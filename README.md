@@ -14,6 +14,12 @@
 
 然後將 `.env.example` 更名成 `.env`
 
+在使用頻道輸入 !whitelist 頻道id
+或是直接編輯 `whitelist.json`，格式如下
+```json
+[id1, id2]
+```
+
 運行 `bot.py`
 
 ## 功能
