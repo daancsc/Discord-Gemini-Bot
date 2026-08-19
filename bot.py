@@ -78,8 +78,7 @@ with open("prompt.txt", "r", encoding="utf-8") as f:
 
 # 定義一個函式來方便呼叫api
 async def call_api(msg):
-    chat_session = model.start_chat(history=[
-    ])
+    chat_session = model.start_chat(history=[])
 
     if not msg: return '這段訊息是空的'
 
@@ -114,7 +113,7 @@ async def update_history(msg, channel_id):
         response = await call_api(
             prompt + 
             "\n".join(history[-50:]) + 
-            f"\n=====\n當前時間是{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n以上是使用者與你的對話紀錄，請用自然語言，客觀的總結出對話(不要使用json格式)的主要內容與重點，並且需提及使用者 ID（而非名稱）和時間，用於未來對話中作為參考，以建立長期記憶。")
+            f"\n=====\n當前時間是{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n以上是使用者與你的對話紀錄，請用自然語言，客觀的總結出對話(不要使用json格式)的主要內容與重點，並且需提及使用者 ID（而非名稱）和當前時間，不要紀錄訊息或回覆ID，用於未來對話中作為參考，以建立長期記憶。")
         await save_to_pool(response, channel_id)
         print(f"\n頻道 {channel_id} 已整理記憶\n" + response + "\n")
         channel_histories[channel_id] = history[-10:]
@@ -346,7 +345,9 @@ async def on_message(msg):
             word += f"\n{attachment_info}"
 
         roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}", msg.channel.id)
+        reply_id = getattr(msg, 'message_reference', None)
+        reply_id = reply_id.message_id if reply_id else "無"
+        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)}, 訊息id: {msg.id}, 回覆id: {reply_id})]: {word}", msg.channel.id)
         print("訊息內容:", word)
 
         response = await call_api(prompt + history)
