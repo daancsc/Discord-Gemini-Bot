@@ -17,6 +17,19 @@ load_dotenv()
 api_key = os.getenv('GEMINI_API_KEY')
 bot_token = os.getenv('BOT_TOKEN')
 
+WHITELIST_FILE = "whitelist.json"
+
+def load_whitelist():
+    try:
+        with open(WHITELIST_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def save_whitelist(data):
+    with open(WHITELIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all()) # 設定 Discord bot
 
@@ -59,7 +72,7 @@ image_model = genai.GenerativeModel(
     generation_config=generation_config) # 定義另外一個 model 用來生成圖片回應 (兩者不能相容)
 
 pool_file = "pool.json"
-message_history = []
+channel_histories = {}
 with open("prompt.txt", "r", encoding="utf-8") as f:
     prompt = f.read()
 
@@ -86,26 +99,31 @@ async def image_api(image_data):
     return response.text
 
 # 上傳對話紀錄
-async def update_history(msg):
-    message_history.append(msg)
+async def update_history(msg, channel_id):
+    if channel_id not in channel_histories:
+        channel_histories[channel_id] = []
+    
+    history = channel_histories[channel_id]
+    history.append(msg)
 
-    if len(message_history) > 200:
-        message_history.pop(0)
+    if len(history) > 200:
+        history.pop(0)
 
     # 每 50 條就觸發 call_api 並寫入 pool.json
-    if len(message_history) >= 50 and len(message_history) % 50 == 0:
+    if len(history) >= 50 and len(history) % 50 == 0:
         response = await call_api(
             prompt + 
-            "\n".join(message_history[-50:]) + 
+            "\n".join(history[-50:]) + 
             f"\n=====\n當前時間是{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n以上是使用者與你的對話紀錄，請用自然語言，客觀的總結出對話(不要使用json格式)的主要內容與重點，並且需提及使用者 ID（而非名稱）和時間，用於未來對話中作為參考，以建立長期記憶。")
-        await save_to_pool(response)
-        print("\n已整理記憶\n" + response + "\n")
-        message_history = message_history[-10:]
+        await save_to_pool(response, channel_id)
+        print(f"\n頻道 {channel_id} 已整理記憶\n" + response + "\n")
+        channel_histories[channel_id] = history[-10:]
 
-    return "\n".join(message_history)
+    return "\n".join(channel_histories[channel_id])
 
 
-async def save_to_pool(response):
+async def save_to_pool(response, channel_id):
+    pool_file = f"pool_{channel_id}.json"
     # 確保 pool.json 存在並是 list 格式
     if os.path.exists(pool_file):
         with open(pool_file, "r", encoding="utf-8") as f:
@@ -145,7 +163,7 @@ def extract_json_block(text):
         start = text.find("{", start + 1)
     return None, -1, -1
 
-async def process_tools_in_response(response: str) -> str:
+async def process_tools_in_response(response: str, channel_id: int) -> str:
     print("原始回應：", response)
     all_tool_outputs = []  # 儲存所有工具的執行結果
     processed_jsons = set()  # 記錄已處理的 JSON 字符串，避免重複
@@ -182,7 +200,7 @@ async def process_tools_in_response(response: str) -> str:
 
         elif data.get("type") == "load_memory" and data.get("amount"):
             print(f"正在使用 get_memory，內容：{data['amount']}")
-            tool_response = await load_memory(data["amount"])
+            tool_response = await load_memory(data["amount"], channel_id)
 
         elif data.get("type") == "get_current_time":
             print("正在使用 get_current_time")
@@ -208,10 +226,10 @@ async def process_tools_in_response(response: str) -> str:
         # 將工具結果合併到系統提示中，並明確要求模型不要生成新的工具 JSON
         history = await update_history(
             "[system]: (模型已調用外部工具，結果如下，請根據結果回應使用者的問題，並避免生成新的工具 JSON 區塊)\n" +
-            "\n".join(all_tool_outputs)
+            "\n".join(all_tool_outputs), channel_id
         )
         response = await call_api(prompt + history)
-        await update_history("[model]: " + response)
+        await update_history("[model]: " + response, channel_id)
     else:
         print("無工具結果，直接返回原始回應")
 
@@ -229,6 +247,25 @@ async def ping(ctx):
     end = time.perf_counter()
     await message.edit(content=f'Pong！延遲 {round((end - start) * 1000)} ms (API 往返) | 閘道 {round(bot.latency * 1000)} ms')
 
+# 白名單管理指令
+@bot.command(name='whitelist')
+@commands.has_permissions(administrator=True)
+async def whitelist(ctx, channel_id: int = None):
+    if channel_id is None:
+        await ctx.send("用法: `!whitelist <頻道ID>`")
+        return
+    
+    current_whitelist = load_whitelist()
+    
+    if channel_id in current_whitelist:
+        current_whitelist.remove(channel_id)
+        save_whitelist(current_whitelist)
+        await ctx.send(f"已將頻道 `{channel_id}` 從白名單中移除")
+    else:
+        current_whitelist.append(channel_id)
+        save_whitelist(current_whitelist)
+        await ctx.send(f"已將頻道 `{channel_id}` 加入白名單")
+
 
 # on_message事件
 @bot.event
@@ -237,6 +274,11 @@ async def on_message(msg):
         return
     await bot.process_commands(msg)
     if msg.content.startswith(bot.command_prefix):
+        return
+    
+    # 檢查白名單
+    current_whitelist = load_whitelist()
+    if msg.channel.id not in current_whitelist:
         return
 
     async with msg.channel.typing():
@@ -286,9 +328,9 @@ async def on_message(msg):
                             os.remove(file_path)
 
         # 重設對話指令
-        global message_history
         if msg.content.lower() == "reset":
-            message_history = []
+            if msg.channel.id in channel_histories:
+                channel_histories[msg.channel.id] = []
             await msg.channel.send("對話紀錄已清除")
             return
 
@@ -304,12 +346,12 @@ async def on_message(msg):
             word += f"\n{attachment_info}"
 
         roles = [role.name for role in msg.author.roles if role != msg.guild.default_role]
-        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}")
+        history = await update_history(f"[{msg.author.display_name}(id: {msg.author.id}, 身分組:{', '.join(roles)})]: {word}", msg.channel.id)
         print("訊息內容:", word)
 
         response = await call_api(prompt + history)
-        await update_history("[model]: " + response)
-        response = await process_tools_in_response(response)
+        await update_history("[model]: " + response, msg.channel.id)
+        response = await process_tools_in_response(response, msg.channel.id)
         await msg.reply(response.replace("[model]:", ""))
         print(response)
 

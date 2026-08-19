@@ -192,9 +192,11 @@ async def youtube_search(query, max_results=5, language="en", duration="medium")
     except Exception as e:
         return f"搜尋影片時發生錯誤：{str(e)}"
     
-async def load_memory(amount="all"):
+async def load_memory(amount="all", channel_id=None):
+    pool_file = f"pool_{channel_id}.json" if channel_id else "pool.json"
+    
     try:
-        async with aiofiles.open("pool.json", mode="r") as f:
+        async with aiofiles.open(pool_file, mode="r") as f:
             content = await f.read()
             data = json.loads(content)
     except FileNotFoundError:
