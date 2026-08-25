@@ -2,15 +2,16 @@ import discord
 import time
 import aiohttp
 from discord.ext import commands
-import google.generativeai as genai
+from google import genai
 import aiohttp
 import json
 import os
 import aiofiles
 from datetime import datetime
 from dotenv import load_dotenv
-from spider import islink,gettitle
+from spider import islink,is_youtube_url,get_youtube_oembed,get_web_summary
 from tools import wolframalpha,get_news,youtube_search,load_memory,get_current_time
+import asyncio
 
 load_dotenv()
 
@@ -33,67 +34,36 @@ def save_whitelist(data):
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all()) # 設定 Discord bot
 
-genai.configure(api_key = api_key) #記得放入自己的api key
-
-generation_config = {
-  "temperature": 0.9,
-  "top_p": 1,
-  "max_output_tokens": 2048,
-  "response_mime_type": "text/plain",
-}
-
-safety_settings = [
-    {
-        'category': 'HARM_CATEGORY_HARASSMENT',
-        'threshold': 'block_none'
-    },
-    {
-        'category': 'HARM_CATEGORY_HATE_SPEECH',
-        'threshold': 'block_none'
-    },
-    {
-        'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        'threshold': 'block_none'
-    },
-    {
-        'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        'threshold': 'block_none'
-    },
-]
-
-model = genai.GenerativeModel(
-  model_name="gemini-3.5-flash-lite",
-  generation_config=generation_config,
-  safety_settings = safety_settings
-)
-
-image_model = genai.GenerativeModel(
-    model_name='gemini-3.5-flash-lite', 
-    generation_config=generation_config) # 定義另外一個 model 用來生成圖片回應 (兩者不能相容)
+client = genai.Client(api_key=api_key)
 
 pool_file = "pool.json"
 channel_histories = {}
 with open("prompt.txt", "r", encoding="utf-8") as f:
     prompt = f.read()
 
+
 # 定義一個函式來方便呼叫api
 async def call_api(msg):
-    chat_session = model.start_chat(history=[])
-
     if not msg: return '這段訊息是空的'
 
-    await chat_session.send_message_async(msg) # 傳送 msg 內容給 Gemini api
-    return chat_session.last.text # 將 api 的回應返還給主程式
+    response = client.models.generate_content(
+        model='gemini-3.5-flash-lite',
+        contents=msg,
+    )
+    return response.text
 
 #圖片辨識
 async def image_api(image_data):
-    image_parts = [{'mime_type': 'image/jpeg', 'data': image_data}]
+    import base64
+    image_parts = [{'mime_type': 'image/jpeg', 'data': base64.b64encode(image_data).decode('utf-8')}]
 
-    # (下) 如果 text 不為空, 就用 text 依據文字內容來生成回應, 如果為空, 就依據 '這張圖片代表什麼?給我更多細節' 來生成回應
     prompt_parts = [image_parts[0], "這張圖片代表什麼? 請詳細描述這張圖片有些什麼元素"]
-    response = image_model.generate_content(prompt_parts)
+    response = client.models.generate_content(
+        model='gemini-3.5-flash-lite',
+        contents=prompt_parts
+    )
 
-    if response._error: return '無法分析這張圖'
+    if not response.text: return '無法分析這張圖'
 
     return response.text
 
@@ -335,11 +305,25 @@ async def on_message(msg):
 
         # 處理文字與網址
         word = msg.content
+        # 假設這是在 Discord Bot 的 async 函式（如 on_message）中執行
         links = islink(msg.content)
         if links:
-            for link in links:
-                title = gettitle(link)
-                word = word.replace(link, f'(一個網址, 網址標題是: "{title}")\n' if title else '(一個網址, 網址無法辨識)\n')
+            # 1. 用 set(links) 去重，避免同一個訊息貼二次相同網址時進行重複網路請求
+            for link in set(links):
+                # 2. 自動判斷網址類型並進行分流
+                if is_youtube_url(link):
+                    summary = await asyncio.to_thread(get_youtube_oembed, link)
+                    url_type = "YouTube 影片"
+                else:
+                    summary = await asyncio.to_thread(get_web_summary, link)
+                    url_type = "網址"
+                
+                # 3. 替換內文（修正錯字「標題是是」與格式調整）
+                if summary:
+                    replacement = f'\n(一個{url_type}, 網址標題是: "{summary["title"]}", 內文摘要是: "{summary["summary"]}")'
+                    word = word.replace(link, replacement)
+                else:
+                    word = word.replace(link, f'\n(一個{url_type}, 網址無法辨識)')
 
         if attachment_info:
             word += f"\n{attachment_info}"
